@@ -1,0 +1,91 @@
+# ==============================================================================
+# Git Ignore Configuration for Odoo ETL Pipeline & DWH Project
+# ==============================================================================
+
+# 1. Environment & Sensitive Credentials
+# NEVER commit credentials, API keys, or production database connection strings
+.env
+.env.*
+!.env.example
+
+# 2. Python Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 3. Python Bytecode & Cache Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 4. Logs & Runtime Output
+logs/
+*.log
+output.log
+MISC/output.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 5. Database Dumps & Large Local Backups
+# Raw PostgreSQL dumps and staging binaries should not be tracked in version control
+DAL_BKP_*
+*.dump
+*.sql.gz
+*.bak
+*.tar
+*.tar.gz
+
+# 6. Testing & Type-Checking Caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+
+# 7. IDE, Editor & OS Configuration Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 8. Data & CSV Files
+*.csv
+
+# 9. Text Files, Notes & Local Credentials
+*.txt
+
+#10. Pdf files
+*.pdf
+
+
+
