@@ -87,5 +87,6 @@ desktop.ini
 #10. Pdf files
 *.pdf
 
-
+#11. Json files
+*.json
 
