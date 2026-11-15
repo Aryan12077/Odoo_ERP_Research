@@ -36,21 +36,27 @@ class OdooClient:
             "id": 1
         }
 
-        response = requests.post(
-            self.url,
-            json=payload,
-            timeout=self.timeout,
-            verify=self.verify_ssl
-        )
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    self.url,
+                    json=payload,
+                    timeout=self.timeout,
+                    verify=self.verify_ssl
+                )
+                response.raise_for_status()
+                result = response.json()
 
-        response.raise_for_status()
+                if "error" in result:
+                    raise Exception(result["error"])
 
-        result = response.json()
-
-        if "error" in result:
-            raise Exception(result["error"])
-
-        return result["result"]
+                return result["result"]
+            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
 
     ####################################################################
     # AUTHENTICATION

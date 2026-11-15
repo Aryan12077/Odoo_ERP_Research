@@ -34,6 +34,9 @@ from pipelines.masters.supplier import SupplierMasterExtractor
 from pipelines.masters.product import ProductMasterExtractor
 from pipelines.masters.currency import CurrencyMasterExtractor
 from pipelines.masters.accounts import ChartOfAccountExtractor, AccountTypeExtractor
+from pipelines.masters.geo import GeoMasterExtractor
+from pipelines.masters.fiscal_calendar import FiscalCalendarExtractor
+from pipelines.masters.analysis_criteria import AnalysisCriteriaExtractor
 
 from pipelines.sales.sales_data import SalesDataExtractor
 from pipelines.sales.monthly_sale import MonthlySaleExtractor
@@ -60,6 +63,9 @@ REGISTRY = {
     "currency_master": CurrencyMasterExtractor,
     "chart_of_account": ChartOfAccountExtractor,
     "account_type": AccountTypeExtractor,
+    "geo_master": GeoMasterExtractor,
+    "fiscal_calendar": FiscalCalendarExtractor,
+    "analysis_criteria": AnalysisCriteriaExtractor,
 
     # Sales
     "sales_data": SalesDataExtractor,
@@ -90,6 +96,9 @@ DOMAINS = {
         "customer_master",
         "supplier_master",
         "product_master",
+        "geo_master",
+        "fiscal_calendar",
+        "analysis_criteria",
     ],
     "sales": [
         "sales_data",
@@ -130,10 +139,15 @@ def main():
         help="Load extracted records into target PostgreSQL database (requires TARGET_DB in .env)"
     )
     parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="Truncate target table(s) before inserting fresh data (implies --load)"
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=5000,
-        help="Batch limit for records to extract"
+        help="Batch limit for records to extract (default: 5000)"
     )
 
     args = parser.parse_args()
@@ -142,9 +156,15 @@ def main():
         parser.print_help()
         sys.exit(1)
 
+    if args.truncate and not args.load:
+        args.load = True
+
     print("=" * 70)
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Odoo Data Pipeline Initiated")
-    print(f"Mode: {'EXTRACT & LOAD' if args.load else 'EXTRACT ONLY (Dry Run)'}")
+    mode_str = "EXTRACT & LOAD" if args.load else "EXTRACT ONLY (Dry Run)"
+    if args.truncate:
+        mode_str += " [TRUNCATE BEFORE INSERT]"
+    print(f"Mode: {mode_str}")
     print("=" * 70)
 
     # 1. Authenticate with Odoo
@@ -200,6 +220,12 @@ def main():
                 ext = extractor_cls()
 
             print(f"--> Running: {task_name.upper()} (Table: {ext.target_table})...", end=" ", flush=True)
+
+            # Truncate target table before load if requested
+            if args.truncate and loader:
+                print(f"[TRUNCATED: {ext.target_table}]", end=" ", flush=True)
+                loader.truncate_table(ext.target_table)
+
             res = ext.run(client, loader=loader)
             print(f"[{res.get('status')}] {res.get('extracted_count')} records in {res.get('extraction_duration_sec')}s")
             results.append(res)

@@ -49,7 +49,9 @@ class ProductMasterExtractor(BaseExtractor):
             "categ_id",
             "company_id",
             "create_date",
-            "weight"
+            "weight",
+            "qty_available",
+            "seller_ids",
         ]
 
         products = client.search_read(
@@ -71,6 +73,29 @@ class ProductMasterExtractor(BaseExtractor):
                 cat_map[c["id"]] = c.get("complete_name") or ""
         except Exception:
             pass
+
+        # Resolve primary supplier information for products
+        seller_ids = set()
+        for pt in products:
+            sids = pt.get("seller_ids")
+            if sids:
+                seller_ids.add(sids[0])
+
+        seller_map = {}
+        if seller_ids:
+            seller_list = list(seller_ids)
+            for i in range(0, len(seller_list), 500):
+                chunk = seller_list[i:i + 500]
+                try:
+                    sinfos = client.search_read(
+                        model="product.supplierinfo",
+                        domain=[("id", "in", chunk)],
+                        fields=["id", "partner_id", "delay"]
+                    )
+                    for s in sinfos:
+                        seller_map[s["id"]] = s
+                except Exception:
+                    pass
 
         rows = []
         snapshot = datetime.now()
@@ -96,6 +121,15 @@ class ProductMasterExtractor(BaseExtractor):
             cost_price = safe_num(pt.get("standard_price"))
             creation_date = parse_date(pt.get("create_date"))
             weight = safe_num(pt.get("weight"))
+            stock_qty = safe_num(pt.get("qty_available"))
+
+            # Supplier resolution
+            first_seller_id = (pt.get("seller_ids") or [None])[0]
+            sup_info = seller_map.get(first_seller_id, {})
+            supplier_name = get_m2o_name(sup_info.get("partner_id"), "NA")
+            lead_time = safe_num(sup_info.get("delay"), 1.0)
+            if lead_time <= 0:
+                lead_time = 1.0
 
             rows.append({
                 "GROUP_COMPANY_CODE": comp_code,
@@ -138,11 +172,11 @@ class ProductMasterExtractor(BaseExtractor):
                 "SALE_PRICE_USD": sale_price,
                 "SBU_CODE": "NA",
                 "SBU": "NA",
-                "STOCK_QUANTITY": 0.0,
+                "STOCK_QUANTITY": stock_qty,
                 "REORDER_LEVEL": 0.0,
-                "LEAD_TIME_IN_DAYS": 1.0,
+                "LEAD_TIME_IN_DAYS": lead_time,
                 "WARRANTY_IN_MONTHS": 0.0,
-                "SUPPLIER": "NA",
+                "SUPPLIER": supplier_name,
                 "DISCOUNT_PERCENTAGE": 0.0,
                 "TAX_RATE": 0.0,
                 "SHIPPING_COST": 0.0,

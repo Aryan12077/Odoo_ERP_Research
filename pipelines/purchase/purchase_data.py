@@ -107,7 +107,7 @@ class PurchaseDataExtractor(BaseExtractor):
                 orders = client.search_read(
                     model="purchase.order",
                     domain=[("id", "in", chunk)],
-                    fields=["id", "name", "picking_type_id", "picking_ids", "invoice_ids"]
+                    fields=["id", "name", "picking_type_id", "picking_ids", "invoice_ids", "date_order"]
                 )
                 for o in orders:
                     order_map[o["id"]] = o
@@ -116,29 +116,33 @@ class PurchaseDataExtractor(BaseExtractor):
                     for bid in o.get("invoice_ids", []):
                         all_bill_ids.add(bid)
 
-        # Batch lookup first picking (GRN) details
+        # Batch lookup all picking (GRN) details
         picking_map = {}
         if all_picking_ids:
-            p_list = list(all_picking_ids)[:500]
-            pickings = client.search_read(
-                model="stock.picking",
-                domain=[("id", "in", p_list)],
-                fields=["id", "name", "date_done"]
-            )
-            for p in pickings:
-                picking_map[p["id"]] = p
+            p_list = list(all_picking_ids)
+            for i in range(0, len(p_list), 500):
+                p_chunk = p_list[i:i + 500]
+                pickings = client.search_read(
+                    model="stock.picking",
+                    domain=[("id", "in", p_chunk)],
+                    fields=["id", "name", "date_done"]
+                )
+                for p in pickings:
+                    picking_map[p["id"]] = p
 
-        # Batch lookup first vendor bill details
+        # Batch lookup all vendor bill details
         bill_map = {}
         if all_bill_ids:
-            b_list = list(all_bill_ids)[:500]
-            bills = client.search_read(
-                model="account.move",
-                domain=[("id", "in", b_list)],
-                fields=["id", "name"]
-            )
-            for b in bills:
-                bill_map[b["id"]] = b
+            b_list = list(all_bill_ids)
+            for i in range(0, len(b_list), 500):
+                b_chunk = b_list[i:i + 500]
+                bills = client.search_read(
+                    model="account.move",
+                    domain=[("id", "in", b_chunk)],
+                    fields=["id", "name"]
+                )
+                for b in bills:
+                    bill_map[b["id"]] = b
 
         rows = []
         snapshot = datetime.now()
@@ -184,13 +188,22 @@ class PurchaseDataExtractor(BaseExtractor):
             unit_price = safe_num(line.get("price_unit"))
             subtotal = safe_num(line.get("price_subtotal"))
             delivery_date = parse_date(line.get("date_planned"))
+            po_date = parse_date(o_info.get("date_order")) or delivery_date
+            lead_time = 0.0
+            if delivery_date and po_date:
+                try:
+                    dt1 = datetime.strptime(str(delivery_date)[:10], "%Y-%m-%d")
+                    dt2 = datetime.strptime(str(po_date)[:10], "%Y-%m-%d")
+                    lead_time = max(0.0, float((dt1 - dt2).days))
+                except Exception:
+                    lead_time = 0.0
 
             rows.append({
                 "GROUP_COMPANY_CODE": comp_code,
                 "COMPANY_CODE": comp_code,
                 "SUPPLIER_CODE": supplier_id,
                 "PURCHASE_ORDER_NUMBER": po_number,
-                "PURCHASE_DATE": delivery_date,
+                "PURCHASE_DATE": po_date,
                 "PO_DELIVERY_DATE": str(delivery_date)[:10] if delivery_date else "NA",
                 "ITEM_CODE": product_code,
                 "ORDERED_QUANTITY": ordered_qty,
@@ -212,7 +225,7 @@ class PurchaseDataExtractor(BaseExtractor):
                 "GATE_ORDER_NUMBER": "NA",
                 "ORDER_STATUS": line.get("state") or "purchase",
                 "EXPECTED_DELIVERY_DATE": delivery_date,
-                "LEAD_TIME": 0.0,
+                "LEAD_TIME": lead_time,
                 "WAREHOUSE_ID": wh_name,
                 "ROW_ID": str(line.get("id")),
                 "BRANCH_ID": comp_code,

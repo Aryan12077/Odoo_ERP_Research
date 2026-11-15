@@ -67,6 +67,23 @@ class DWHLoader:
                 "error": str(e)
             }
 
+    def truncate_table(self, table_name: str, include_temp: bool = True) -> None:
+        """
+        Truncates the target table (and optionally its _TEMP staging table) in the target schema.
+        """
+        tables = [f'"{self.schema}"."{table_name}"']
+        if include_temp:
+            tables.append(f'"{self.schema}"."{table_name}_TEMP"')
+
+        conn = self.get_connection()
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    for tbl in tables:
+                        cur.execute(f"TRUNCATE TABLE {tbl};")
+        finally:
+            conn.close()
+
     def load_staging_and_merge(
         self,
         table_name: str,
